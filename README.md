@@ -1,3 +1,4 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GaeloCanelo/Carrito_Interfaz)
 # 🛒 Sistema de Carrito de Compras (Cliente-Servidor) con Interfaz Gráfica
 
 Este repositorio contiene la implementación de un sistema de ventas distribuido basado en la arquitectura **Cliente-Servidor** utilizando **Java Sockets**. El proyecto cuenta con una interfaz gráfica (Swing), gestión de inventario en tiempo real, transmisión de archivos (imágenes) y generación de comprobantes de compra en PDF.
