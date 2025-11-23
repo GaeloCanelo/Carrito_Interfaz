@@ -1,4 +1,3 @@
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GaeloCanelo/Carrito_Interfaz)
 # 🛒 Sistema de Carrito de Compras (Cliente-Servidor) con Interfaz Gráfica
 
 Este repositorio contiene la implementación de un sistema de ventas distribuido basado en la arquitectura **Cliente-Servidor** utilizando **Java Sockets**. El proyecto cuenta con una interfaz gráfica (Swing), gestión de inventario en tiempo real, transmisión de archivos (imágenes) y generación de comprobantes de compra en PDF.
@@ -101,6 +100,61 @@ java -cp ".:../lib/itextpdf-5.5.13.2.jar" Servidor
 ```bash
 java -cp ".:../lib/itextpdf-5.5.13.2.jar" ClienteGUI
 ```
+
+---
+
+## 🔍 Verificación de Conexión (Puerto 6040)
+
+Para validar que el Cliente y el Servidor están comunicándose correctamente, puedes monitorear las conexiones activas en el puerto **6040** usando herramientas de red.
+
+### En Linux (Ubuntu)
+
+**1. Instalar `net-tools` (si es necesario):**
+```bash
+# Verificar si netstat está instalado
+netstat --version
+
+# Si no está instalado, ejecutar:
+sudo apt install net-tools
+```
+
+**2. Monitorear conexiones activas:**
+
+Con el Servidor y Cliente en ejecución, abre una terminal adicional y ejecuta:
+```bash
+netstat -an | grep 6040
+```
+
+**Salida esperada:**
+```
+tcp        0      0 192.168.1.15:45123      192.168.1.10:6040       ESTABLISHED
+```
+
+**Interpretación:**
+- `192.168.1.15:45123` → IP y puerto del Cliente (puerto aleatorio asignado)
+- `192.168.1.10:6040` → IP y puerto del Servidor
+- `ESTABLISHED` → Conexión activa y estable
+
+### En Windows
+
+**1. Abrir PowerShell o CMD como Administrador**
+
+**2. Ejecutar el comando:**
+```powershell
+netstat -an | findstr 6040
+```
+
+**Salida esperada:**
+```
+TCP    192.168.1.10:6040      192.168.1.15:45123     ESTABLISHED
+TCP    0.0.0.0:6040           0.0.0.0:0              LISTENING
+```
+
+**Interpretación:**
+- `LISTENING` → El Servidor está escuchando en el puerto 6040
+- `ESTABLISHED` → Hay un Cliente conectado activamente
+
+> **💡 Consejo:** Ejecuta este comando mientras el Cliente está conectado. Si cierras el Cliente, la línea `ESTABLISHED` desaparecerá.
 
 ---
 
