@@ -1,9 +1,8 @@
-/* 
-===================================================================================
+/* ===================================================================================
     Ramírez Lozano Gael Martín & González Martínez Silvia 
     - PROYECTO - Práctica_1 Carrito de Compras
-    Clase: ClienteGUI.java (Ventana Principal y Lógica)
-    6CM4
+    - Clase: ClienteGUI.java (Ventana Principal y Lógica)
+    - Grupo: 6CM4
 =================================================================================== 
 */
 import javax.swing.*;
@@ -38,10 +37,15 @@ public class ClienteGUI extends JFrame {
     private JPanel mainPanel;
     private PanelCatalogo panelCatalogo;
     private PanelCarrito panelCarrito;
+    
+    // Variable para el diálogo de carga
+    private JDialog dialogoEspera;
+    // Variable para guardar el nombre del PDF actual
+    private String nombreReciboActual = null;
 
     public ClienteGUI() {
         setTitle("Tiendita de la Esquina - Cliente v3.0");
-        setSize(1200, 750); // Un poco más grande para que todo quepa bien
+        setSize(1200, 750); 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -74,8 +78,16 @@ public class ClienteGUI extends JFrame {
         JButton btnConectar = new JButton("Conectar");
         btnConectar.setFont(fuenteGrande);
 
+        // --- LÓGICA DE CONEXIÓN CON HILO (THREAD) ---
         btnConectar.addActionListener(e -> {
-            conectar(txtIp.getText(), Integer.parseInt(txtPort.getText()));
+            String ip = txtIp.getText();
+            int puerto = Integer.parseInt(txtPort.getText());
+            
+            mostrarDialogoEspera();
+            
+            new Thread(() -> {
+                conectar(ip, puerto);
+            }).start();
         });
 
         gbc.gridx = 0; gbc.gridy = 0; p.add(lblIp, gbc);
@@ -88,24 +100,62 @@ public class ClienteGUI extends JFrame {
 
         return p;
     }
+    
+    private void mostrarDialogoEspera() {
+        dialogoEspera = new JDialog(this, "Conectando...", true); // Modal
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        
+        JLabel lblMensaje = new JLabel("<html><center>Contactando al Servidor...<br><br>" +
+                "Si la tienda está atendiendo a otro cliente,<br>" +
+                "permanecerás en esta fila de espera.</center></html>", SwingConstants.CENTER);
+        lblMensaje.setFont(new Font("Arial", Font.BOLD, 14));
+        
+        JProgressBar barra = new JProgressBar();
+        barra.setIndeterminate(true); 
+        
+        p.add(lblMensaje, BorderLayout.CENTER);
+        p.add(barra, BorderLayout.SOUTH);
+        
+        dialogoEspera.add(p);
+        dialogoEspera.setSize(400, 200);
+        dialogoEspera.setLocationRelativeTo(this);
+        dialogoEspera.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE); 
+        
+        SwingUtilities.invokeLater(() -> dialogoEspera.setVisible(true));
+    }
 
     private void conectar(String ip, int puerto) {
         try {
-            File reciboViejo = new File("Destino_CLT/Recibo_Compra.pdf");
-            if (reciboViejo.exists()) reciboViejo.delete();
-
+            // 1. PRIMERO INTENTAMOS CONECTAR (Esto bloquea si hay fila)
             socket = new Socket(ip, puerto);
             salida = new ObjectOutputStream(socket.getOutputStream());
             entrada = new ObjectInputStream(socket.getInputStream());
 
-            JOptionPane.showMessageDialog(this, "Conectado! Descargando catálogo...");
+            // 2. YA DENTRO: Ahora sí es seguro limpiar los recibos viejos de ESTA máquina
+            // porque ya es nuestro turno.
+            File carpeta = new File("Destino_CLT");
+            if (carpeta.exists() && carpeta.isDirectory()) {
+                for (File f : carpeta.listFiles()) {
+                    if (f.getName().toLowerCase().endsWith(".pdf")) {
+                        f.delete();
+                    }
+                }
+            }
+
+            // 3. Continuamos con la descarga
             catalogo = (ArrayList<Producto>) entrada.readObject();
             descargarImagenes(catalogo);
 
-            iniciarInterfazPrincipal();
+            if (dialogoEspera != null) dialogoEspera.dispose();
+
+            SwingUtilities.invokeLater(() -> iniciarInterfazPrincipal());
 
         } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error de conexión: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            if (dialogoEspera != null) dialogoEspera.dispose();
+            SwingUtilities.invokeLater(() -> 
+                JOptionPane.showMessageDialog(this, "Error de conexión: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE)
+            );
         }
     }
 
@@ -152,10 +202,13 @@ public class ClienteGUI extends JFrame {
             public void windowClosing(java.awt.event.WindowEvent windowEvent) {
                 try {
                     salida.writeObject("SALIR");
+                    // Limpieza al salir: Borramos SOLO imágenes, respetamos el PDF actual
                     File carpeta = new File("Destino_CLT");
                     if (carpeta.exists()) {
                         for (File f : carpeta.listFiles()) {
-                            if (!f.getName().toLowerCase().endsWith(".pdf")) f.delete();
+                            if (!f.getName().toLowerCase().endsWith(".pdf")) {
+                                f.delete();
+                            }
                         }
                     }
                 } catch (Exception e) {}
@@ -240,8 +293,10 @@ public class ClienteGUI extends JFrame {
 
             if (Desktop.isDesktopSupported()) {
                 try {
-                    File myFile = new File("Destino_CLT/Recibo_Compra.pdf");
-                    Desktop.getDesktop().open(myFile);
+                    if (nombreReciboActual != null) {
+                        File myFile = new File(nombreReciboActual);
+                        Desktop.getDesktop().open(myFile);
+                    }
                 } catch (IOException ex) {
                     JOptionPane.showMessageDialog(this, "No se pudo abrir el PDF automáticamente.");
                 }
@@ -253,10 +308,15 @@ public class ClienteGUI extends JFrame {
         }
     }
 
-    // --- PDF MEJORADO: Centrado y Negritas ---
+    // --- PDF MEJORADO: Centrado, Negritas y Fecha Restaurada ---
     private void generarReciboPDF(ArrayList<Producto> listaCarrito, double total) throws Exception {
+        // Generamos nombre único por sesión (Timestamp)
+        SimpleDateFormat sdfArchivo = new SimpleDateFormat("yyyyMMdd_HHmmss");
+        String timestamp = sdfArchivo.format(new Date());
+        nombreReciboActual = "Destino_CLT/Recibo_Compra_" + timestamp + ".pdf";
+
         Document documento = new Document();
-        PdfWriter.getInstance(documento, new FileOutputStream("Destino_CLT/Recibo_Compra.pdf"));
+        PdfWriter.getInstance(documento, new FileOutputStream(nombreReciboActual));
         documento.open();
         
         com.itextpdf.text.Font fuenteTitulo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, BaseColor.BLACK);
@@ -268,17 +328,20 @@ public class ClienteGUI extends JFrame {
         titulo.setAlignment(Element.ALIGN_CENTER);
         documento.add(titulo);
         
+        // --- FECHA RESTAURADA ---
         SimpleDateFormat formatoFecha = new SimpleDateFormat("EEEE dd 'de' MMMM 'de' yyyy HH:mm:ss", new Locale("es", "MX"));
-        Paragraph fecha = new Paragraph("Fecha: " + formatoFecha.format(new Date()) + "\n\n", fuenteNormal);
-        fecha.setAlignment(Element.ALIGN_CENTER); // Fecha centrada
+        String fechaActual = formatoFecha.format(new Date());
+        fechaActual = fechaActual.substring(0, 1).toUpperCase() + fechaActual.substring(1);
+        
+        Paragraph fecha = new Paragraph("Fecha: " + fechaActual + "\n\n", fuenteNormal);
+        fecha.setAlignment(Element.ALIGN_CENTER); 
         documento.add(fecha);
+        // ------------------------
 
-        // Tabla
         PdfPTable tabla = new PdfPTable(4);
         tabla.setWidthPercentage(100);
         tabla.setWidths(new float[]{1, 4, 2, 2}); 
 
-        // Encabezados (Negrita y Centrados)
         String[] headers = {"Cant", "Producto", "P.Unit", "Subtotal"};
         for(String h : headers){
             PdfPCell celda = new PdfPCell(new Phrase(h, fuenteNegrita));
@@ -288,7 +351,6 @@ public class ClienteGUI extends JFrame {
             tabla.addCell(celda);
         }
 
-        // Contenido (Centrado)
         for (Producto p : listaCarrito) {
             double sub = p.getPrecio() * p.getStock();
             
@@ -297,25 +359,23 @@ public class ClienteGUI extends JFrame {
             tabla.addCell(c1);
             
             PdfPCell c2 = new PdfPCell(new Phrase(p.getNombre(), fuenteNormal));
-            c2.setHorizontalAlignment(Element.ALIGN_CENTER); // Centrado
+            c2.setHorizontalAlignment(Element.ALIGN_CENTER); 
             tabla.addCell(c2);
             
             PdfPCell c3 = new PdfPCell(new Phrase("$" + p.getPrecio(), fuenteNormal));
-            c3.setHorizontalAlignment(Element.ALIGN_CENTER); // Centrado
+            c3.setHorizontalAlignment(Element.ALIGN_CENTER); 
             tabla.addCell(c3);
             
             PdfPCell c4 = new PdfPCell(new Phrase("$" + sub, fuenteNormal));
-            c4.setHorizontalAlignment(Element.ALIGN_CENTER); // Centrado
+            c4.setHorizontalAlignment(Element.ALIGN_CENTER); 
             tabla.addCell(c4);
         }
         documento.add(tabla);
         
-        // Total Centrado
         Paragraph totalP = new Paragraph("\nGRAN TOTAL: $" + total, fuenteGrande);
-        totalP.setAlignment(Element.ALIGN_CENTER);
+        totalP.setAlignment(Element.ALIGN_RIGHT);
         documento.add(totalP);
         
-        // Pie de página restaurado
         Paragraph despedida = new Paragraph("\n¡Gracias por su preferencia!", fuenteNormal);
         despedida.setAlignment(Element.ALIGN_CENTER);
         documento.add(despedida);

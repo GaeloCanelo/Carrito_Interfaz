@@ -19,6 +19,7 @@ Este repositorio contiene la implementación de un sistema de ventas distribuido
 
 ### 👤 Cliente (GUI)
 - **Interfaz Gráfica (Swing):** Diseño intuitivo con paneles de conexión, catálogo visual y gestión de carrito
+- **Gestión de Concurrencia (Cola de Espera):** Implementación de hilos (`Threads`) para evitar el congelamiento de la interfaz cuando el servidor está ocupado, mostrando una ventana de espera activa
 - **Carrito Interactivo:** Permite agregar productos, modificar cantidades con validación de stock real y eliminar ítems
 - **Sincronización Visual:** El catálogo se actualiza automáticamente tras cada compra, ocultando productos agotados
 - **Generación de Recibos:** Crea un **ticket de compra en PDF** profesional (con tablas y diseño estético) utilizando la librería **iText**
